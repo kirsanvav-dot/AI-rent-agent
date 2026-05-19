@@ -1,27 +1,35 @@
-# Rental AI Agent
+# AI Agent Projects
 
-AI-агент для посуточной аренды квартир.  
-Принимает вебхуки от Авито и RealtyCalendar, ведёт CRM в Notion, общается с гостями через Telegram.
+Этот репозиторий содержит два раздела:
 
-> README будет дополнен в Шаге 9 TRACKER.md.
+---
 
-## Быстрый старт (заполняется в Шаге 9)
+## 📁 [`rent-agent/`](./rent-agent/)
 
-```bash
-git clone <repo>
-cd rental-ai-agent
-npm install
-cp .env.example .env
-# Заполнить .env своими ключами
-npm run dev
-```
+AI-агент для автоматизации посуточной аренды квартиры.
 
-## Эндпоинты
+**Стек:** Node.js · Express · OpenRouter · Notion · Telegram · Авито STR API · RealtyCalendar
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/health` | Health-check |
-| POST | `/webhook/telegram` | Апдейты от Telegram Bot |
-| POST | `/webhook/realtycalendar` | Брони от RealtyCalendar |
-| POST | `/webhook/avito` | События от Авито |
-# AI-rent-agent
+**Что делает:**
+- Принимает вебхуки от Авито и RealtyCalendar
+- Создаёт и обновляет брони в Notion-CRM автоматически
+- Общается с гостями в Telegram от лица «Анны» (LLM-персонаж)
+- Синхронизирует занятость дат на Авито
+- Уведомляет владельца о новых бронях
+
+---
+
+## 📁 [`how-to-build-agent/`](./how-to-build-agent/)
+
+Методология создания AI-агента для любой задачи автоматизации.
+
+**Описывает:**
+- Как формулировать задачу для агента
+- Как писать SPECIFICATION.md, ARCHITECTURE.md, TRACKER.md
+- Как работать с Cursor пошагово
+- Паттерны кода: fire-and-forget вебхуки, изоляция сервисов, config через env
+- Как тестировать и деплоить
+
+---
+
+Подход проверен на реальном проекте: от идеи до работающего агента за несколько сессий в Cursor.
