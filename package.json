@@ -1,0 +1,24 @@
+{
+  "name": "rental-ai-agent",
+  "version": "0.1.0",
+  "description": "AI-агент для посуточной аренды: вебхуки Авито и RealtyCalendar, Notion CRM, ответы клиентам в Telegram через OpenRouter LLM",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@notionhq/client": "^2.2.15",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "node-telegram-bot-api": "^0.66.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
