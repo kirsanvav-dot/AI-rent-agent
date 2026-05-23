@@ -12,7 +12,7 @@
  */
 require('dotenv').config();
 
-const { bot, sendMessage, notifyOwner, formatBookingNotification } = require('../src/services/telegram');
+const { bot, sendMessage, notifyOwner, formatBookingNotification, notifyOwnerWithActions } = require('../src/services/telegram');
 
 const TEST_BOOKING = {
   bookingId:  'TEST-001',
@@ -70,6 +70,21 @@ async function run() {
     ok('Уведомление отправлено владельцу');
   } catch (err) {
     fail('notifyOwner', err);
+  }
+
+  // ── Тест 4: notifyOwnerWithActions — сообщение с двумя кнопками ─────────
+  console.log('\n── Тест 4: notifyOwnerWithActions (inline-кнопки) ─────');
+  try {
+    const keyboard = [
+      [
+        { text: '✅ Подтверждена', callback_data: 'status_confirmed:test-page-id' },
+        { text: '❌ Отменена', callback_data: 'status_cancelled:test-page-id' },
+      ],
+    ];
+    await notifyOwnerWithActions('🧪 <b>Тест test_telegram.js</b> — inline-кнопки', keyboard);
+    ok('Сообщение с двумя inline-кнопками отправлено владельцу');
+  } catch (err) {
+    fail('notifyOwnerWithActions', err);
   }
 
   console.log(`\n══════════════════════════════════════════════════════`);

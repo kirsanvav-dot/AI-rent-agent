@@ -75,10 +75,72 @@ function formatBookingNotification(booking) {
   ].join('\n');
 }
 
+/**
+ * Отправляет HTML-сообщение с inline-клавиатурой.
+ *
+ * @param {number|string} chatId
+ * @param {string} text
+ * @param {Array<Array<{text: string, callback_data: string}>>} inlineKeyboard
+ */
+async function sendMessageWithKeyboard(chatId, text, inlineKeyboard) {
+  if (!bot) {
+    console.warn('[telegram] sendMessageWithKeyboard пропущен — бот не инициализирован');
+    return;
+  }
+
+  console.log(`[telegram] sendMessageWithKeyboard: chatId=${chatId}, buttons=${inlineKeyboard.flat().length}`);
+
+  await bot.sendMessage(chatId, text, {
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: inlineKeyboard },
+  });
+}
+
+/**
+ * Отправляет HTML-уведомление владельцу с inline-кнопками.
+ *
+ * @param {string} html
+ * @param {Array<Array<{text: string, callback_data: string}>>} inlineKeyboard
+ */
+async function notifyOwnerWithActions(html, inlineKeyboard) {
+  if (!bot) {
+    console.warn('[telegram] notifyOwnerWithActions пропущен — бот не инициализирован');
+    return;
+  }
+  if (!TELEGRAM_OWNER_CHAT_ID) {
+    console.warn('[telegram] notifyOwnerWithActions пропущен — TELEGRAM_OWNER_CHAT_ID не задан');
+    return;
+  }
+
+  console.log(`[telegram] notifyOwnerWithActions: ownerChatId=${TELEGRAM_OWNER_CHAT_ID}, buttons=${inlineKeyboard.flat().length}`);
+
+  await sendMessageWithKeyboard(TELEGRAM_OWNER_CHAT_ID, html, inlineKeyboard);
+}
+
+/**
+ * Подтверждает нажатие inline-кнопки (убирает «часики»).
+ *
+ * @param {string} callbackQueryId
+ * @param {string} text — всплывающий текст для пользователя
+ */
+async function answerCallbackQuery(callbackQueryId, text) {
+  if (!bot) {
+    console.warn('[telegram] answerCallbackQuery пропущен — бот не инициализирован');
+    return;
+  }
+
+  console.log(`[telegram] answerCallbackQuery: id=${callbackQueryId}, text="${text}"`);
+
+  await bot.answerCallbackQuery(callbackQueryId, { text });
+}
+
 module.exports = {
   bot,
   ownerChatId: TELEGRAM_OWNER_CHAT_ID,
   sendMessage,
   notifyOwner,
   formatBookingNotification,
+  sendMessageWithKeyboard,
+  notifyOwnerWithActions,
+  answerCallbackQuery,
 };
