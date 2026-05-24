@@ -11,7 +11,8 @@
  */
 require('dotenv').config();
 
-const { createBooking, findBookingByChatId, updateBookingStatus } = require('../src/services/notion');
+const { createBooking, findBookingByChatId, updateBookingStatus,
+  findBookingByBookingId, findBookingByPhone, findBookingByAvitoChatId, updateBookingFields } = require('../src/services/notion');
 
 const TEST_BOOKING = {
   bookingId: `TEST-${Date.now()}`,
@@ -95,6 +96,52 @@ async function run() {
     ok('Вернул null для несуществующего chatId=0');
   } catch (err) {
     fail('findBookingByChatId (несуществующий)', err);
+  }
+
+  console.log('\n── Тест 6: findBookingByBookingId ───────────────────');
+  try {
+    if (!createdBooking?.bookingId) throw new Error('bookingId недоступен — тест 1 упал');
+    const found = await findBookingByBookingId(createdBooking.bookingId);
+    if (!found) throw new Error(`Бронь не найдена по bookingId=${createdBooking.bookingId}`);
+    if (found.pageId !== createdBooking.pageId)
+      throw new Error(`pageId не совпадает: ${found.pageId} ≠ ${createdBooking.pageId}`);
+    ok(`findBookingByBookingId: найдена pageId=${found.pageId}`);
+  } catch (err) {
+    fail('findBookingByBookingId', err);
+  }
+
+  console.log('\n── Тест 7: findBookingByPhone ───────────────────────');
+  try {
+    const found = await findBookingByPhone(TEST_BOOKING.phone);
+    if (!found) throw new Error(`Бронь не найдена по телефону ${TEST_BOOKING.phone}`);
+    ok(`findBookingByPhone: найдена гость=${found.guestName}`);
+  } catch (err) {
+    fail('findBookingByPhone', err);
+  }
+
+  console.log('\n── Тест 8: updateBookingFields ──────────────────────');
+  try {
+    if (!createdBooking?.pageId) throw new Error('pageId недоступен — тест 1 упал');
+    const updated = await updateBookingFields(createdBooking.pageId, { rcSynced: true });
+    if (updated.rcSynced !== true)
+      throw new Error(`rcSynced не обновился: ${updated.rcSynced}`);
+    ok('updateBookingFields: rcSynced=true установлен');
+  } catch (err) {
+    fail('updateBookingFields', err);
+  }
+
+  console.log('\n── Тест 9: findBookingByAvitoChatId ─────────────────');
+  try {
+    if (!createdBooking?.pageId) throw new Error('pageId недоступен — тест 1 упал');
+    const testChatId = `avito-test-${Date.now()}`;
+    await updateBookingFields(createdBooking.pageId, { avitoChatId: testChatId });
+    const found = await findBookingByAvitoChatId(testChatId);
+    if (!found) throw new Error(`Бронь не найдена по avitoChatId=${testChatId}`);
+    if (found.pageId !== createdBooking.pageId)
+      throw new Error(`pageId не совпадает: ${found.pageId} ≠ ${createdBooking.pageId}`);
+    ok(`findBookingByAvitoChatId: найдена pageId=${found.pageId}`);
+  } catch (err) {
+    fail('findBookingByAvitoChatId', err);
   }
 
   console.log(`\n══════════════════════════════════════════════════════`);

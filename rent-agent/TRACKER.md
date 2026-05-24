@@ -294,7 +294,7 @@
 
 ---
 
-## Шаг 7 — Новый сервис `services/realtycalendar.js` (исходящий API) `[backlog]`
+## Шаг 7 — Новый сервис `services/realtycalendar.js` (исходящий API) `[done]`
 
 **Цель:** Создать новый сервис с единственным методом `blockDates`, который умеет блокировать даты в RealtyCalendar (для дальнейшего проброса в ЦИАН и Яндекс).
 
@@ -340,7 +340,7 @@
 
 ---
 
-## Шаг 8 — `routes/avito.js`: реальная интеграция Авито → Notion CRM `[backlog]` [from gap analysis]
+## Шаг 8 — `routes/avito.js`: реальная интеграция Авито → Notion CRM `[done]` [from gap analysis]
 
 **Цель:** Закрыть GAP-006 и GAP-007 — Авито-роут начинает писать каждый чат в Notion и обогащать LLM-контекстом из CRM.
 
@@ -669,8 +669,8 @@
 | 4 | Миграция схемы Notion (без кода) | Внешняя инфраструктура | CR-ADD-13, 15 | `[done]` |
 | 5 | `services/notion.js`: новые методы | Сервис | CR-CHG-05 | `[done]` |
 | 6 | `services/telegram.js`: inline-кнопки | Сервис | CR-ADD-06, CR-CHG-06 | `[done]` |
-| 7 | Новый сервис `services/realtycalendar.js` | Сервис | CR-ADD-12 | `[backlog]` |
-| 8 | `routes/avito.js`: Авито → Notion CRM | Роут / бизнес-логика | CR-ADD-08, 09, 10; CR-CHG-03 / GAP-006, 007 | `[backlog]` [from gap analysis] |
+| 7 | Новый сервис `services/realtycalendar.js` | Сервис | CR-ADD-12 | `[done]` |
+| 8 | `routes/avito.js`: Авито → Notion CRM | Роут / бизнес-логика | CR-ADD-08, 09, 10; CR-CHG-03 / GAP-006, 007 | `[done]` [from gap analysis] |
 | 9 | `routes/telegram.js`: идентификация гостя | Роут / бизнес-логика | CR-ADD-03, 04, 05; CR-CHG-02 / GAP-002 | `[backlog]` [from gap analysis] |
 | 10 | `routes/telegram.js` + RC-роут: смена статуса | Роут / бизнес-логика | CR-ADD-07, CR-CHG-04 / GAP-004 | `[backlog]` [from gap analysis] |
 | 11 | `routes/telegram.js`: confirm_booking → blockDates | Роут / бизнес-логика | CR-ADD-14 | `[backlog]` |

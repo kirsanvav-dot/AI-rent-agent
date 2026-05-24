@@ -1,4 +1,12 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
+
+if (process.env.NODE_ENV === 'production' && process.env.DEMO_MODE === 'true') {
+  console.warn('[index] ⚠️ DEMO_MODE=true в production!');
+}
+if (process.env.NODE_ENV === 'production' && (!process.env.AVITO_CLIENT_ID || !process.env.AVITO_CLIENT_SECRET)) {
+  console.error('[index] Production без AVITO_CLIENT_ID/SECRET — выход');
+  process.exit(1);
+}
 
 const express = require('express');
 const requestLogger = require('./src/middleware/logger');

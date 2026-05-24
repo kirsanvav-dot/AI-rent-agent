@@ -10,8 +10,9 @@
  *   2. POST /webhook/telegram       → ответ «Анны» гостю
  *   3. POST /webhook/avito          → ответ в чат Авито (только HTTP 200, реальный Авито не вызывается)
  */
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const axios = require('axios');
+const { findBookingByAvitoChatId, findBookingByBookingId } = require('../src/services/notion');
 
 const BASE_URL = `http://localhost:${process.env.PORT || 3000}`;
 const DELAY_MS = 3000; // ждём pipeline после 200 OK
@@ -160,6 +161,69 @@ async function run() {
   await test('Неизвестный action RealtyCalendar → 200 OK, пропущено', async () => {
     const { status } = await api.post('/webhook/realtycalendar', { action: 'unknown_event' });
     if (status !== 200) throw new Error(`Ожидался 200, получен ${status}`);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Тест 5: Авито → новый лид в Notion CRM
+  // ────────────────────────────────────────────────────────────────────────
+  const AVITO_LEAD_CHAT = `avito-lead-e2e-${Date.now()}`;
+
+  console.log(BOLD('\n── Тест 5: Авито — новый чат → лид в Notion ───────────'));
+  console.log(YELLOW(`  chat_id: ${AVITO_LEAD_CHAT}`));
+
+  await test('Новый Авито-чат → лид создан в Notion', async () => {
+    const payload = {
+      payload: {
+        type: 'message',
+        author_id: 987654321,
+        chat_id: AVITO_LEAD_CHAT,
+        item_id: 'avito-item-e2e-001',
+        content: { text: 'Здравствуйте, интересует квартира на выходные' },
+      },
+    };
+    const { status } = await api.post('/webhook/avito', payload);
+    if (status !== 200) throw new Error(`Ожидался 200, получен ${status}`);
+
+    await sleep(DELAY_MS);
+
+    const booking = await findBookingByAvitoChatId(AVITO_LEAD_CHAT);
+    if (!booking) throw new Error('Лид не найден в Notion');
+    if (booking.bookingId !== `AVITO-${AVITO_LEAD_CHAT}`) {
+      throw new Error(`ID Брони: ${booking.bookingId}, ожидался AVITO-${AVITO_LEAD_CHAT}`);
+    }
+    if (booking.status !== 'Ожидает подтверждения') {
+      throw new Error(`Статус: ${booking.status}, ожидался «Ожидает подтверждения»`);
+    }
+    if (booking.source !== 'Авито') {
+      throw new Error(`Источник: ${booking.source}, ожидался «Авито»`);
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Тест 6: Авито — повторное сообщение без дубликата
+  // ────────────────────────────────────────────────────────────────────────
+  console.log(BOLD('\n── Тест 6: Авито — повторное сообщение → без дубликата ─'));
+
+  await test('Повторное сообщение в том же чате → одна запись в Notion', async () => {
+    const payload = {
+      payload: {
+        type: 'message',
+        author_id: 987654321,
+        chat_id: AVITO_LEAD_CHAT,
+        content: { text: 'А можно с животными?' },
+      },
+    };
+    const { status } = await api.post('/webhook/avito', payload);
+    if (status !== 200) throw new Error(`Ожидался 200, получен ${status}`);
+
+    await sleep(DELAY_MS);
+
+    const byChat = await findBookingByAvitoChatId(AVITO_LEAD_CHAT);
+    const byId = await findBookingByBookingId(`AVITO-${AVITO_LEAD_CHAT}`);
+    if (!byChat || !byId) throw new Error('Запись не найдена после повторного сообщения');
+    if (byChat.pageId !== byId.pageId) {
+      throw new Error('pageId различается — возможен дубликат');
+    }
   });
 
   // ── Итог ─────────────────────────────────────────────────────────────────
