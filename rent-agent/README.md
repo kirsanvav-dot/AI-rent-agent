@@ -9,7 +9,7 @@ AI-агент для посуточной аренды квартир.
 
 ```bash
 git clone <repo>
-cd rental-ai-agent
+cd rent-agent
 npm install
 cp .env.example .env
 # Заполнить .env своими ключами
