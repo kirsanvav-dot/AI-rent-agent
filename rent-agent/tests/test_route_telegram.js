@@ -29,8 +29,9 @@ const assert = require('assert');
 const notion   = require('../src/services/notion');
 const llm      = require('../src/services/llm');
 const telegram = require('../src/services/telegram');
+const realtycalendar = require('../src/services/realtycalendar');
 
-const calls = { notion: [], llm: [], telegram: [] };
+const calls = { notion: [], llm: [], telegram: [], realtycalendar: [] };
 
 notion.findBookingByChatId = async (chatId) => {
   calls.notion.push(['findBookingByChatId', chatId]);
@@ -48,6 +49,15 @@ notion.updateBookingFields = async (pageId, fields) => {
   calls.notion.push(['updateBookingFields', pageId, fields]);
   return { ...(notion._mockBooking || {}), pageId, ...fields };
 };
+notion.findBookingByPageId = async (pageId) => {
+  calls.notion.push(['findBookingByPageId', pageId]);
+  return notion._mockBookingByPageId || null;
+};
+notion.updateBookingStatus = async (pageId, status) => {
+  calls.notion.push(['updateBookingStatus', pageId, status]);
+  const base = notion._mockBookingByPageId || {};
+  return { ...base, pageId, status };
+};
 
 llm.generateReply = async (text, context) => {
   calls.llm.push(['generateReply', text, context]);
@@ -60,6 +70,15 @@ telegram.sendMessage = async (chatId, text) => {
 };
 telegram.notifyOwner = async (html) => {
   calls.telegram.push(['notifyOwner', html]);
+};
+telegram.answerCallbackQuery = async (id, text) => {
+  calls.telegram.push(['answerCallbackQuery', { id, text }]);
+};
+
+realtycalendar.blockDates = async (params) => {
+  calls.realtycalendar.push(['blockDates', params]);
+  if (realtycalendar._mockShouldThrow) throw new Error('RC API down');
+  return { rcBookingId: 'MOCK-RC-1' };
 };
 
 const telegramWebhook = require('../src/routes/telegram');
@@ -78,9 +97,12 @@ function reset() {
   calls.notion.length = 0;
   calls.llm.length = 0;
   calls.telegram.length = 0;
+  calls.realtycalendar.length = 0;
   notion._mockBooking = null;
   notion._mockBookingById = null;
   notion._mockBookingByPhone = null;
+  notion._mockBookingByPageId = null;
+  realtycalendar._mockShouldThrow = false;
   llm._mockReply = 'mock-LLM-reply';
   llm._mockShouldThrow = false;
 }
@@ -123,6 +145,17 @@ const FOUND_BOOKING = {
   totalPrice: 12000,
   source: 'Яндекс Аренда',
 };
+
+const CB_UPDATE = (fromId, callbackData, callbackQueryId = 'cb-001') => ({
+  update_id: 2,
+  callback_query: {
+    id: callbackQueryId,
+    from: { id: fromId, first_name: 'Owner', language_code: 'ru' },
+    message: { message_id: 200, chat: { id: fromId, type: 'private' } },
+    chat_instance: 'test',
+    data: callbackData,
+  },
+});
 
 // ── Тесты ────────────────────────────────────────────────────────────────────
 async function run() {
@@ -228,6 +261,130 @@ async function run() {
     await sleep(50);
 
     assert.strictEqual(calls.llm[0][1], 'Привет', 'текст должен быть обрезан');
+  });
+
+  await test('callback_query не-владелец → answerCallbackQuery("Нет доступа"), Notion не вызывается', async () => {
+    const res = makeRes();
+    await telegramWebhook(
+      makeReq(CB_UPDATE(888777666, 'status_checkedin:page-001')),
+      res,
+    );
+    await sleep(50);
+
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(calls.notion.length, 0);
+    const answers = calls.telegram.filter((c) => c[0] === 'answerCallbackQuery');
+    assert.strictEqual(answers.length, 1);
+    assert.strictEqual(answers[0][1].text, 'Нет доступа');
+  });
+
+  await test('callback_query владелец + валидный переход → updateBookingStatus + answerCallbackQuery', async () => {
+    notion._mockBookingByPageId = { pageId: 'page-cb-001', status: 'Подтверждена' };
+
+    const res = makeRes();
+    await telegramWebhook(
+      makeReq(CB_UPDATE(999000111, 'status_checkedin:page-cb-001')),
+      res,
+    );
+    await sleep(50);
+
+    assert.strictEqual(calls.notion.length, 2);
+    assert.deepStrictEqual(calls.notion[0], ['findBookingByPageId', 'page-cb-001']);
+    assert.deepStrictEqual(calls.notion[1], ['updateBookingStatus', 'page-cb-001', 'Заехал']);
+
+    const answers = calls.telegram.filter((c) => c[0] === 'answerCallbackQuery');
+    assert.strictEqual(answers.length, 1);
+    assert.strictEqual(answers[0][1].text, 'Статус обновлён ✓');
+  });
+
+  await test('callback_query владелец + недопустимый переход → updateBookingStatus НЕ вызывается', async () => {
+    notion._mockBookingByPageId = { pageId: 'page-cb-002', status: 'Подтверждена' };
+
+    const res = makeRes();
+    await telegramWebhook(
+      makeReq(CB_UPDATE(999000111, 'status_completed:page-cb-002')),
+      res,
+    );
+    await sleep(50);
+
+    assert.strictEqual(calls.notion.length, 1, 'только findBookingByPageId');
+    assert.deepStrictEqual(calls.notion[0], ['findBookingByPageId', 'page-cb-002']);
+
+    const answers = calls.telegram.filter((c) => c[0] === 'answerCallbackQuery');
+    assert.strictEqual(answers.length, 1);
+    assert.strictEqual(answers[0][1].text, 'Недопустимый переход');
+  });
+
+  await test('confirm_booking: успех → blockDates + updateBookingFields + notifyOwner', async () => {
+    notion._mockBookingByPageId = {
+      pageId: 'page-confirm-001',
+      source: 'Авито',
+      rcSynced: false,
+      dates: { start: '2026-11-01', end: '2026-11-03' },
+    };
+
+    const res = makeRes();
+    await telegramWebhook(
+      makeReq(CB_UPDATE(999000111, 'confirm_booking:page-confirm-001')),
+      res,
+    );
+    await sleep(50);
+
+    assert.strictEqual(calls.realtycalendar.length, 1);
+    assert.strictEqual(calls.realtycalendar[0][0], 'blockDates');
+    assert.strictEqual(calls.notion.length, 2);
+    assert.deepStrictEqual(calls.notion[1], [
+      'updateBookingFields',
+      'page-confirm-001',
+      { status: 'Подтверждена', rcSynced: true },
+    ]);
+
+    const answers = calls.telegram.filter((c) => c[0] === 'answerCallbackQuery');
+    assert.strictEqual(answers[0][1].text, 'Даты заблокированы в ЦИАН и Яндексе ✓');
+    const notifies = calls.telegram.filter((c) => c[0] === 'notifyOwner');
+    assert.strictEqual(notifies.length, 1);
+  });
+
+  await test('confirm_booking: source=ЦИАН → гард-петля, blockDates не вызывается', async () => {
+    notion._mockBookingByPageId = {
+      pageId: 'page-cian-001',
+      source: 'ЦИАН',
+      rcSynced: false,
+      dates: { start: '2026-12-01', end: '2026-12-03' },
+    };
+
+    const res = makeRes();
+    await telegramWebhook(
+      makeReq(CB_UPDATE(999000111, 'confirm_booking:page-cian-001')),
+      res,
+    );
+    await sleep(50);
+
+    assert.strictEqual(calls.realtycalendar.length, 0);
+    assert.strictEqual(calls.notion.length, 1);
+    const answers = calls.telegram.filter((c) => c[0] === 'answerCallbackQuery');
+    assert.ok(answers[0][1].text.includes('RC'));
+  });
+
+  await test('confirm_booking: rcSynced=true → идемпотентность, blockDates не вызывается', async () => {
+    notion._mockBookingByPageId = {
+      pageId: 'page-synced-001',
+      source: 'Авито',
+      rcSynced: true,
+      dates: { start: '2026-11-01', end: '2026-11-03' },
+    };
+
+    const res = makeRes();
+    await telegramWebhook(
+      makeReq(CB_UPDATE(999000111, 'confirm_booking:page-synced-001')),
+      res,
+    );
+    await sleep(50);
+
+    assert.strictEqual(calls.realtycalendar.length, 0);
+    assert.strictEqual(calls.notion.length, 1);
+    const answers = calls.telegram.filter((c) => c[0] === 'answerCallbackQuery');
+    assert.strictEqual(answers[0][1].text, 'Уже синхронизировано ✓');
   });
 
   console.log(`\n  Итог: ${passed} прошло, ${failed} упало`);

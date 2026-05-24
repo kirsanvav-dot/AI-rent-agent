@@ -1,8 +1,20 @@
 const avito = require('../services/avito');
 const llm = require('../services/llm');
 const notion = require('../services/notion');
+const telegram = require('../services/telegram');
+const { formatBookingNotification } = require('../services/telegram');
 
 const { AVITO_USER_ID } = process.env;
+
+/** Клавиатура для нового Авито-лида (ARCHITECTURE §3.6). */
+function buildAvitoLeadKeyboard(pageId) {
+  return [
+    [
+      { text: '🔒 Подтвердить бронь', callback_data: `confirm_booking:${pageId}` },
+      { text: '❌ Отменена', callback_data: `status_cancelled:${pageId}` },
+    ],
+  ];
+}
 
 /**
  * POST /webhook/avito
@@ -107,6 +119,23 @@ async function avitoWebhook(req, res) {
           phone: guest.phone,
         });
         console.log(`[webhook/avito] findBookingByAvitoChatId: chatId=${chatId} created pageId=${booking.pageId}`);
+
+        try {
+          const html = formatBookingNotification({
+            bookingId: booking.bookingId,
+            guestName: booking.guestName,
+            phone: booking.phone,
+            apartment: booking.apartment,
+            dateFrom: booking.dates?.start,
+            dateTo: booking.dates?.end,
+            totalPrice: booking.totalPrice,
+            source: booking.source,
+          });
+          await telegram.notifyOwnerWithActions(html, buildAvitoLeadKeyboard(booking.pageId));
+          console.log(`[webhook/avito] notifyOwnerWithActions: pageId=${booking.pageId}`);
+        } catch (err) {
+          console.error(`[webhook/avito] Ошибка notifyOwnerWithActions: ${err.message}`);
+        }
       } catch (err) {
         console.error(`[webhook/avito] Ошибка createBooking: ${err.message}`);
       }

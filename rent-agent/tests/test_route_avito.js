@@ -31,8 +31,9 @@ const assert = require('assert');
 const avito = require('../src/services/avito');
 const llm   = require('../src/services/llm');
 const notion = require('../src/services/notion');
+const telegram = require('../src/services/telegram');
 
-const calls = { avito: [], llm: [], notion: [] };
+const calls = { avito: [], llm: [], notion: [], telegram: [] };
 
 notion.findBookingByAvitoChatId = async (chatId) => {
   calls.notion.push(['findBookingByAvitoChatId', chatId]);
@@ -71,6 +72,10 @@ llm.generateReply = async (text, context) => {
   return llm._mockReply || 'mock-LLM-reply';
 };
 
+telegram.notifyOwnerWithActions = async (html, keyboard) => {
+  calls.telegram.push(['notifyOwnerWithActions', html, keyboard]);
+};
+
 const avitoWebhook = require('../src/routes/avito');
 
 // ── Утилиты ──────────────────────────────────────────────────────────────────
@@ -87,6 +92,7 @@ function reset() {
   calls.avito.length = 0;
   calls.llm.length = 0;
   calls.notion.length = 0;
+  calls.telegram.length = 0;
   avito._mockTokenShouldThrow = false;
   llm._mockReply = 'mock-LLM-reply';
   llm._mockShouldThrow = false;
@@ -217,6 +223,31 @@ async function run() {
     assert.strictEqual(sendCall[1].userId, 'avito-owner-42');
     assert.strictEqual(sendCall[1].chatId, 'chat-XYZ');
     assert.strictEqual(sendCall[1].text,   'mock-LLM-reply');
+
+    const notify = calls.telegram.filter((c) => c[0] === 'notifyOwnerWithActions');
+    assert.strictEqual(notify.length, 1, 'notifyOwnerWithActions для нового лида');
+    const keyboard = notify[0][2];
+    assert.strictEqual(keyboard.flat().length, 2);
+    assert.ok(keyboard[0][0].callback_data.startsWith('confirm_booking:'));
+    assert.ok(keyboard[0][1].callback_data.startsWith('status_cancelled:'));
+  });
+
+  await test('Повторное сообщение в известном чате → notifyOwnerWithActions НЕ вызывается', async () => {
+    notion._mockBooking = {
+      pageId: 'existing-page',
+      bookingId: 'AVITO-existing',
+      source: 'Авито',
+      status: 'Ожидает подтверждения',
+      dates: { start: null, end: null },
+    };
+
+    const res = makeRes();
+    await avitoWebhook(makeReq(guestMsg('Повторный вопрос', 'existing-chat')), res);
+    await sleep(50);
+
+    assert.strictEqual(calls.notion.length, 1, 'только findBookingByAvitoChatId');
+    assert.strictEqual(calls.notion[0][0], 'findBookingByAvitoChatId');
+    assert.strictEqual(calls.telegram.length, 0, 'уведомление только для нового лида');
   });
 
   await test('Сбой токена → LLM и sendMessage НЕ вызываются (early return)', async () => {

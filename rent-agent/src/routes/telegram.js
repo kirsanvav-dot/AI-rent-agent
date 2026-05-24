@@ -1,15 +1,36 @@
 const notion = require('../services/notion');
 const llm = require('../services/llm');
 const telegram = require('../services/telegram');
+const realtycalendar = require('../services/realtycalendar');
 
 const BIND_HINT =
   '\n\n💡 Чтобы я могла ответить по вашей брони, отправьте код брони или поделитесь контактом через кнопку.';
+
+/** Источники RC — повторная синхронизация создаёт петлю (NFR-8). */
+const RC_LOOP_SOURCES = new Set(['Яндекс Аренда', 'ЦИАН']);
+
+/** @see CHANGE_REQUEST.md §1.3 — допустимые переходы статусов */
+const ALLOWED_TRANSITIONS = {
+  'Ожидает подтверждения': ['Подтверждена', 'Отменена'],
+  'Подтверждена':          ['Заехал', 'Отменена'],
+  'Заехал':                ['Завершена', 'Отменена'],
+  'Завершена':             [],
+  'Отменена':              [],
+};
+
+const ACTION_TO_STATUS = {
+  status_confirmed:  'Подтверждена',
+  status_checkedin:  'Заехал',
+  status_completed:  'Завершена',
+  status_cancelled:  'Отменена',
+};
 
 /**
  * POST /webhook/telegram
  * Принимает апдейты от Telegram Bot API.
  *
  * Логика (async, fire-and-forget):
+ *   callback_query → owner guard → status transition / confirm_booking stub
  *   message.text → findBookingByChatId → [bookingId/phone match] → llm → sendMessage
  *   message.contact → findBookingByPhone → updateBookingFields → sendMessage
  */
@@ -34,6 +55,11 @@ async function telegramWebhook(req, res) {
 
   const update = req.body;
 
+  if (update.callback_query) {
+    handleCallbackQuery(update);
+    return;
+  }
+
   if (update.message?.contact) {
     handleContactMessage(update);
     return;
@@ -44,6 +70,185 @@ async function telegramWebhook(req, res) {
   }
 
   handleTextMessage(update);
+}
+
+async function handleConfirmBooking(pageId, callbackQueryId) {
+  let booking = null;
+
+  try {
+    booking = await notion.findBookingByPageId(pageId);
+  } catch (err) {
+    console.error(`[webhook/telegram] Ошибка findBookingByPageId (confirm_booking): ${err.message}`);
+    try {
+      await telegram.answerCallbackQuery(callbackQueryId, 'Ошибка CRM');
+    } catch (e) {
+      console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${e.message}`);
+    }
+    return;
+  }
+
+  if (!booking) {
+    console.error(`[webhook/telegram] confirm_booking: booking not found pageId=${pageId}`);
+    try {
+      await telegram.answerCallbackQuery(callbackQueryId, 'Бронь не найдена');
+    } catch (err) {
+      console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${err.message}`);
+    }
+    return;
+  }
+
+  console.log(
+    `[webhook/telegram] confirm_booking: pageId=${pageId} source=${booking.source} rcSynced=${booking.rcSynced}`,
+  );
+
+  if (RC_LOOP_SOURCES.has(booking.source)) {
+    try {
+      await telegram.answerCallbackQuery(callbackQueryId, 'Бронь уже из RC, синхронизация не нужна');
+    } catch (err) {
+      console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${err.message}`);
+    }
+    return;
+  }
+
+  if (booking.rcSynced === true) {
+    try {
+      await telegram.answerCallbackQuery(callbackQueryId, 'Уже синхронизировано ✓');
+    } catch (err) {
+      console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${err.message}`);
+    }
+    return;
+  }
+
+  const dateFrom = booking.dates?.start;
+  const dateTo = booking.dates?.end;
+  if (!dateFrom || !dateTo) {
+    try {
+      await telegram.answerCallbackQuery(callbackQueryId, 'Укажите даты в CRM');
+    } catch (err) {
+      console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${err.message}`);
+    }
+    return;
+  }
+
+  try {
+    await realtycalendar.blockDates({
+      objectId: process.env.REALTYCALENDAR_OBJECT_ID,
+      dateFrom,
+      dateTo,
+      externalRef: pageId,
+    });
+
+    await notion.updateBookingFields(pageId, { status: 'Подтверждена', rcSynced: true });
+    await telegram.answerCallbackQuery(callbackQueryId, 'Даты заблокированы в ЦИАН и Яндексе ✓');
+    await telegram.notifyOwner('✅ Бронь подтверждена, ЦИАН и Яндекс обновлены');
+  } catch (err) {
+    console.error(`[webhook/telegram] confirm_booking: ошибка RC: ${err.message}`);
+    try {
+      await telegram.answerCallbackQuery(callbackQueryId, 'Ошибка RC, попробуйте ещё раз');
+    } catch (e) {
+      console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${e.message}`);
+    }
+  }
+}
+
+function handleCallbackQuery(update) {
+  const cq = update.callback_query;
+  const fromId = cq.from.id;
+  const callbackQueryId = cq.id;
+  const callbackData = cq.data || '';
+
+  (async () => {
+    const ownerId = Number(process.env.TELEGRAM_OWNER_CHAT_ID);
+
+    if (fromId !== ownerId) {
+      try {
+        await telegram.answerCallbackQuery(callbackQueryId, 'Нет доступа');
+      } catch (err) {
+        console.error(`[webhook/telegram] Ошибка answerCallbackQuery (access): ${err.message}`);
+      }
+      return;
+    }
+
+    const colonIdx = callbackData.indexOf(':');
+    if (colonIdx === -1) {
+      console.error(`[webhook/telegram] callback_query: invalid callback_data=${callbackData}`);
+      try {
+        await telegram.answerCallbackQuery(callbackQueryId, 'Неверный формат');
+      } catch (err) {
+        console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${err.message}`);
+      }
+      return;
+    }
+
+    const action = callbackData.slice(0, colonIdx);
+    const pageId = callbackData.slice(colonIdx + 1);
+
+    console.log(`[webhook/telegram] callback_query: action=${action} pageId=${pageId}`);
+
+    if (action === 'confirm_booking') {
+      await handleConfirmBooking(pageId, callbackQueryId);
+      return;
+    }
+
+    const targetStatus = ACTION_TO_STATUS[action];
+    if (!targetStatus) {
+      console.error(`[webhook/telegram] callback_query: unknown action=${action}`);
+      try {
+        await telegram.answerCallbackQuery(callbackQueryId, 'Неизвестное действие');
+      } catch (err) {
+        console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${err.message}`);
+      }
+      return;
+    }
+
+    let booking = null;
+    try {
+      booking = await notion.findBookingByPageId(pageId);
+    } catch (err) {
+      console.error(`[webhook/telegram] Ошибка findBookingByPageId: ${err.message}`);
+      try {
+        await telegram.answerCallbackQuery(callbackQueryId, 'Ошибка CRM');
+      } catch (e) {
+        console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${e.message}`);
+      }
+      return;
+    }
+
+    if (!booking) {
+      console.error(`[webhook/telegram] callback_query: booking not found pageId=${pageId}`);
+      try {
+        await telegram.answerCallbackQuery(callbackQueryId, 'Бронь не найдена');
+      } catch (err) {
+        console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${err.message}`);
+      }
+      return;
+    }
+
+    const allowed = ALLOWED_TRANSITIONS[booking.status] || [];
+    if (!allowed.includes(targetStatus)) {
+      console.error(
+        `[webhook/telegram] callback_query: invalid transition ${booking.status} → ${targetStatus}`,
+      );
+      try {
+        await telegram.answerCallbackQuery(callbackQueryId, 'Недопустимый переход');
+      } catch (err) {
+        console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${err.message}`);
+      }
+      return;
+    }
+
+    try {
+      await notion.updateBookingStatus(pageId, targetStatus);
+      await telegram.answerCallbackQuery(callbackQueryId, 'Статус обновлён ✓');
+    } catch (err) {
+      console.error(`[webhook/telegram] Ошибка updateBookingStatus: ${err.message}`);
+      try {
+        await telegram.answerCallbackQuery(callbackQueryId, 'Ошибка обновления');
+      } catch (e) {
+        console.error(`[webhook/telegram] Ошибка answerCallbackQuery: ${e.message}`);
+      }
+    }
+  })();
 }
 
 function handleContactMessage(update) {

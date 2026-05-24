@@ -455,7 +455,7 @@
 
 ---
 
-## Шаг 10 — `routes/telegram.js` + `routes/realtycalendar.js`: смена статуса владельцем `[backlog]` [from gap analysis]
+## Шаг 10 — `routes/telegram.js` + `routes/realtycalendar.js`: смена статуса владельцем `[done]` [from gap analysis]
 
 **Цель:** Закрыть GAP-004 — владелец меняет статусы броней inline-кнопками в Telegram; RC-уведомление обзаводится клавиатурой.
 
@@ -511,7 +511,7 @@
 
 ---
 
-## Шаг 11 — `routes/telegram.js`: confirm_booking → `realtycalendar.blockDates` `[backlog]`
+## Шаг 11 — `routes/telegram.js`: confirm_booking → `realtycalendar.blockDates` `[done]`
 
 **Цель:** Реализовать обратное направление двунаправленной синхронизации (US-CHG-6): по нажатию `Подтвердить бронь` агент блокирует даты в RC, что пробрасывается в ЦИАН/Яндекс.
 
@@ -672,8 +672,8 @@
 | 7 | Новый сервис `services/realtycalendar.js` | Сервис | CR-ADD-12 | `[done]` |
 | 8 | `routes/avito.js`: Авито → Notion CRM | Роут / бизнес-логика | CR-ADD-08, 09, 10; CR-CHG-03 / GAP-006, 007 | `[done]` [from gap analysis] |
 | 9 | `routes/telegram.js`: идентификация гостя | Роут / бизнес-логика | CR-ADD-03, 04, 05; CR-CHG-02 / GAP-002 | `[done]` [from gap analysis] |
-| 10 | `routes/telegram.js` + RC-роут: смена статуса | Роут / бизнес-логика | CR-ADD-07, CR-CHG-04 / GAP-004 | `[backlog]` [from gap analysis] |
-| 11 | `routes/telegram.js`: confirm_booking → blockDates | Роут / бизнес-логика | CR-ADD-14 | `[backlog]` |
+| 10 | `routes/telegram.js` + RC-роут: смена статуса | Роут / бизнес-логика | CR-ADD-07, CR-CHG-04 / GAP-004 | `[done]` [from gap analysis] |
+| 11 | `routes/telegram.js`: confirm_booking → blockDates | Роут / бизнес-логика | CR-ADD-14 | `[done]` |
 | 12 | Сквозной end-to-end тест | Тестирование | проверяет всё | `[backlog]` |
 | 13 | README + runbook | Документация | CR-ADD-11 | `[backlog]` |
 

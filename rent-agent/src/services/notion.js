@@ -309,6 +309,29 @@ async function findBookingByAvitoChatId(chatId) {
  * @param {object} fields — частичный BookingData (только изменяемые поля)
  * @returns {object} обновлённая запись
  */
+/**
+ * Загружает бронь по Notion page ID.
+ *
+ * @param {string} pageId
+ * @returns {object|null}
+ */
+async function findBookingByPageId(pageId) {
+  console.log(`[notion] findBookingByPageId: pageId=${pageId}`);
+
+  try {
+    const page = await notion.pages.retrieve({ page_id: pageId });
+    const booking = parseNotionPage(page);
+    console.log(`[notion] findBookingByPageId: found bookingId=${booking.bookingId}, status=${booking.status}`);
+    return booking;
+  } catch (err) {
+    if (err.code === 'object_not_found') {
+      console.log(`[notion] findBookingByPageId: pageId=${pageId} не найден`);
+      return null;
+    }
+    throw err;
+  }
+}
+
 async function updateBookingFields(pageId, fields) {
   const keys = Object.keys(fields).join(', ');
   console.log(`[notion] updateBookingFields: pageId=${pageId}, fields=[${keys}]`);
@@ -326,6 +349,7 @@ module.exports = {
   createBooking,
   findBookingByChatId,
   updateBookingStatus,
+  findBookingByPageId,
   findBookingByBookingId,
   findBookingByPhone,
   findBookingByAvitoChatId,

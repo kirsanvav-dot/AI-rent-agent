@@ -50,6 +50,9 @@ avito.blockDates = async (token, userId, itemId, dateFrom, dateTo) => {
 telegram.notifyOwner = async (html) => {
   calls.telegram.push(['notifyOwner', html]);
 };
+telegram.notifyOwnerWithActions = async (html, keyboard) => {
+  calls.telegram.push(['notifyOwnerWithActions', html, keyboard]);
+};
 
 // Загружаем роут ПОСЛЕ подмены — он подхватит наши стабы
 const realtycalendarWebhook = require('../src/routes/realtycalendar');
@@ -135,8 +138,19 @@ async function run() {
     assert.strictEqual(calls.avito[0][0], 'getToken');
     assert.strictEqual(calls.avito[1][0], 'blockDates');
 
-    assert.strictEqual(calls.telegram.length, 1, 'telegram.notifyOwner вызван 1 раз');
-    assert.strictEqual(calls.telegram[0][0], 'notifyOwner');
+    assert.strictEqual(calls.telegram.length, 1, 'telegram.notifyOwnerWithActions вызван 1 раз');
+    assert.strictEqual(calls.telegram[0][0], 'notifyOwnerWithActions');
+    const keyboard = calls.telegram[0][2];
+    assert.ok(Array.isArray(keyboard), 'keyboard — массив рядов кнопок');
+    assert.strictEqual(keyboard.flat().length, 3, '3 кнопки статуса');
+    assert.ok(
+      keyboard.flat().every((btn) => btn.callback_data.startsWith('status_')),
+      'callback_data начинается с status_',
+    );
+    assert.ok(
+      keyboard.flat().every((btn) => btn.callback_data.endsWith(':mock-page-id-001')),
+      'callback_data содержит pageId',
+    );
   });
 
   await test('create_booking БЕЗ avito_item_id → Авито пропускается, Notion и Telegram вызываются', async () => {
@@ -148,6 +162,7 @@ async function run() {
     assert.strictEqual(calls.notion.length, 1, 'Notion должен быть вызван');
     assert.strictEqual(calls.avito.length, 0, 'Авито должен быть пропущен (нет avito_item_id)');
     assert.strictEqual(calls.telegram.length, 1, 'Telegram должен быть вызван');
+    assert.strictEqual(calls.telegram[0][0], 'notifyOwnerWithActions');
   });
 
   await test('Маппинг payload → BookingData (notion.createBooking)', async () => {
@@ -193,6 +208,7 @@ async function run() {
       assert.strictEqual(res.statusCode, 200, '200 OK всё равно вернулся');
       assert.strictEqual(calls.avito.length,    2, 'Avito выполнился несмотря на ошибку Notion');
       assert.strictEqual(calls.telegram.length, 1, 'Telegram выполнился несмотря на ошибку Notion');
+      assert.strictEqual(calls.telegram[0][0], 'notifyOwner', 'fallback без pageId → notifyOwner');
     } finally {
       notion.createBooking = original;
     }

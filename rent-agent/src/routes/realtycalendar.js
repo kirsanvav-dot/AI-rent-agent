@@ -3,6 +3,19 @@ const avito = require('../services/avito');
 const telegram = require('../services/telegram');
 const { formatBookingNotification } = require('../services/telegram');
 
+/** Inline-клавиатура смены статуса для уведомления владельцу (ARCHITECTURE §3.6). */
+function buildStatusKeyboard(pageId) {
+  return [
+    [
+      { text: '🏠 Заехал', callback_data: `status_checkedin:${pageId}` },
+      { text: '🎉 Завершена', callback_data: `status_completed:${pageId}` },
+    ],
+    [
+      { text: '❌ Отменена', callback_data: `status_cancelled:${pageId}` },
+    ],
+  ];
+}
+
 /**
  * POST /webhook/realtycalendar
  * Принимает события о бронях от RealtyCalendar (Яндекс Путешествия, ЦИАН).
@@ -68,7 +81,11 @@ async function realtycalendarWebhook(req, res) {
   // ── Шаг 3: уведомляем владельца в Telegram ────────────────────────────────
   try {
     const html = formatBookingNotification(bookingData);
-    await telegram.notifyOwner(html);
+    if (savedBooking?.pageId) {
+      await telegram.notifyOwnerWithActions(html, buildStatusKeyboard(savedBooking.pageId));
+    } else {
+      await telegram.notifyOwner(html);
+    }
     console.log(`[webhook/realtycalendar] Telegram: уведомление отправлено`);
   } catch (err) {
     console.error(`[webhook/realtycalendar] Ошибка Telegram: ${err.message}`);
