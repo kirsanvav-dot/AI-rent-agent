@@ -12,7 +12,7 @@
  */
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const axios = require('axios');
-const { findBookingByAvitoChatId, findBookingByBookingId } = require('../src/services/notion');
+const { findBookingByAvitoChatId, findBookingByBookingId, findBookingByChatId } = require('../src/services/notion');
 
 const BASE_URL = `http://localhost:${process.env.PORT || 3000}`;
 const DELAY_MS = 3000; // ждём pipeline после 200 OK
@@ -223,6 +223,117 @@ async function run() {
     if (!byChat || !byId) throw new Error('Запись не найдена после повторного сообщения');
     if (byChat.pageId !== byId.pageId) {
       throw new Error('pageId различается — возможен дубликат');
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Тест 7: Telegram — матчинг по коду брони
+  // ────────────────────────────────────────────────────────────────────────
+  const TG_MATCH_CHAT = 800000000 + (Date.now() % 100000000);
+  const TG_BOOKING_ID = RC_PAYLOAD.booking_id;
+
+  console.log(BOLD('\n── Тест 7: Telegram — код брони → привязка chat_id ──'));
+  console.log(YELLOW(`  chat_id: ${TG_MATCH_CHAT}, booking_id: ${TG_BOOKING_ID}`));
+
+  await test('Код брони → Telegram chat_id записан в Notion', async () => {
+    const payload = {
+      update_id: 200000001,
+      message: {
+        message_id: 2,
+        from: { id: TG_MATCH_CHAT, first_name: 'E2E Match', language_code: 'ru' },
+        chat: { id: TG_MATCH_CHAT, type: 'private' },
+        date: Math.floor(Date.now() / 1000),
+        text: TG_BOOKING_ID,
+      },
+    };
+    const { status } = await api.post('/webhook/telegram', payload);
+    if (status !== 200) throw new Error(`Ожидался 200, получен ${status}`);
+
+    await sleep(DELAY_MS);
+
+    const booking = await findBookingByChatId(TG_MATCH_CHAT);
+    if (!booking) throw new Error('Бронь не найдена по chat_id после матчинга');
+    if (booking.bookingId !== TG_BOOKING_ID) {
+      throw new Error(`bookingId: ${booking.bookingId}, ожидался ${TG_BOOKING_ID}`);
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Тест 8: Telegram — матчинг по contact
+  // ────────────────────────────────────────────────────────────────────────
+  const TG_CONTACT_CHAT = 777666555;
+  const RC_CONTACT_PHONE = '+79002223344';
+  const RC_CONTACT_BOOKING = `E2E-CONTACT-${Date.now()}`;
+
+  console.log(BOLD('\n── Тест 8: Telegram — contact → привязка chat_id ──────'));
+  console.log(YELLOW(`  chat_id: ${TG_CONTACT_CHAT}, phone: ${RC_CONTACT_PHONE}`));
+
+  await test('Contact → Telegram chat_id записан в Notion', async () => {
+    const rcContactPayload = {
+      action: 'create_booking',
+      booking_id: RC_CONTACT_BOOKING,
+      date_from: '2026-09-01',
+      date_to: '2026-09-03',
+      total_price: 5000,
+      guest: { name: 'E2E Contact Guest', phone: RC_CONTACT_PHONE },
+      property: { title: 'Квартира для contact-теста', avito_item_id: null },
+      booking_origin: { title: 'ЦИАН' },
+    };
+    const { status: rcStatus } = await api.post('/webhook/realtycalendar', rcContactPayload);
+    if (rcStatus !== 200) throw new Error(`RC webhook: ожидался 200, получен ${rcStatus}`);
+    await sleep(DELAY_MS);
+
+    const payload = {
+      update_id: 200000002,
+      message: {
+        message_id: 3,
+        from: { id: TG_CONTACT_CHAT, first_name: 'E2E Contact', language_code: 'ru' },
+        chat: { id: TG_CONTACT_CHAT, type: 'private' },
+        date: Math.floor(Date.now() / 1000),
+        contact: {
+          phone_number: RC_CONTACT_PHONE,
+          first_name: 'E2E Contact',
+          user_id: TG_CONTACT_CHAT,
+        },
+      },
+    };
+    const { status } = await api.post('/webhook/telegram', payload);
+    if (status !== 200) throw new Error(`Ожидался 200, получен ${status}`);
+
+    await sleep(DELAY_MS);
+
+    const booking = await findBookingByChatId(TG_CONTACT_CHAT);
+    if (!booking) throw new Error('Бронь не найдена по chat_id после contact');
+    if (booking.bookingId !== RC_CONTACT_BOOKING) {
+      throw new Error(`bookingId: ${booking.bookingId}, ожидался ${RC_CONTACT_BOOKING}`);
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Тест 9: Telegram — повторное сообщение находит бронь сразу
+  // ────────────────────────────────────────────────────────────────────────
+  console.log(BOLD('\n── Тест 9: Telegram — повторный chatId → findByChatId ─'));
+
+  await test('Повторное сообщение → бронь находится по chat_id без повторной привязки', async () => {
+    const payload = {
+      update_id: 200000003,
+      message: {
+        message_id: 4,
+        from: { id: TG_MATCH_CHAT, first_name: 'E2E Match', language_code: 'ru' },
+        chat: { id: TG_MATCH_CHAT, type: 'private' },
+        date: Math.floor(Date.now() / 1000),
+        text: 'Спасибо, а во сколько заезд?',
+      },
+    };
+    const { status } = await api.post('/webhook/telegram', payload);
+    if (status !== 200) throw new Error(`Ожидался 200, получен ${status}`);
+
+    await sleep(DELAY_MS);
+
+    const booking = await findBookingByChatId(TG_MATCH_CHAT);
+    if (!booking) throw new Error('Бронь не найдена при повторном сообщении');
+    if (Number(booking.telegramChatId) !== TG_MATCH_CHAT) {
+      throw new Error(`telegramChatId: ${booking.telegramChatId}, ожидался ${TG_MATCH_CHAT}`);
     }
   });
 

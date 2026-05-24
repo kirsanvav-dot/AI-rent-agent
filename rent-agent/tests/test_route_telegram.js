@@ -34,7 +34,19 @@ const calls = { notion: [], llm: [], telegram: [] };
 
 notion.findBookingByChatId = async (chatId) => {
   calls.notion.push(['findBookingByChatId', chatId]);
-  return notion._mockBooking; // подкладываем нужное в каждом тесте
+  return notion._mockBooking;
+};
+notion.findBookingByBookingId = async (bookingId) => {
+  calls.notion.push(['findBookingByBookingId', bookingId]);
+  return notion._mockBookingById || null;
+};
+notion.findBookingByPhone = async (phone) => {
+  calls.notion.push(['findBookingByPhone', phone]);
+  return notion._mockBookingByPhone || null;
+};
+notion.updateBookingFields = async (pageId, fields) => {
+  calls.notion.push(['updateBookingFields', pageId, fields]);
+  return { ...(notion._mockBooking || {}), pageId, ...fields };
 };
 
 llm.generateReply = async (text, context) => {
@@ -67,6 +79,8 @@ function reset() {
   calls.llm.length = 0;
   calls.telegram.length = 0;
   notion._mockBooking = null;
+  notion._mockBookingById = null;
+  notion._mockBookingByPhone = null;
   llm._mockReply = 'mock-LLM-reply';
   llm._mockShouldThrow = false;
 }

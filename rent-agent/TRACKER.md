@@ -397,7 +397,7 @@
 
 ---
 
-## Шаг 9 — `routes/telegram.js`: идентификация гостя (код брони + contact) `[backlog]` [from gap analysis]
+## Шаг 9 — `routes/telegram.js`: идентификация гостя (код брони + contact) `[done]` [from gap analysis]
 
 **Цель:** Закрыть GAP-002 — реализовать матчинг гостя по коду брони (вариант A) и по `message.contact` (вариант B); записать `Telegram chat_id` в Notion при успешном матчинге.
 
@@ -671,7 +671,7 @@
 | 6 | `services/telegram.js`: inline-кнопки | Сервис | CR-ADD-06, CR-CHG-06 | `[done]` |
 | 7 | Новый сервис `services/realtycalendar.js` | Сервис | CR-ADD-12 | `[done]` |
 | 8 | `routes/avito.js`: Авито → Notion CRM | Роут / бизнес-логика | CR-ADD-08, 09, 10; CR-CHG-03 / GAP-006, 007 | `[done]` [from gap analysis] |
-| 9 | `routes/telegram.js`: идентификация гостя | Роут / бизнес-логика | CR-ADD-03, 04, 05; CR-CHG-02 / GAP-002 | `[backlog]` [from gap analysis] |
+| 9 | `routes/telegram.js`: идентификация гостя | Роут / бизнес-логика | CR-ADD-03, 04, 05; CR-CHG-02 / GAP-002 | `[done]` [from gap analysis] |
 | 10 | `routes/telegram.js` + RC-роут: смена статуса | Роут / бизнес-логика | CR-ADD-07, CR-CHG-04 / GAP-004 | `[backlog]` [from gap analysis] |
 | 11 | `routes/telegram.js`: confirm_booking → blockDates | Роут / бизнес-логика | CR-ADD-14 | `[backlog]` |
 | 12 | Сквозной end-to-end тест | Тестирование | проверяет всё | `[backlog]` |
