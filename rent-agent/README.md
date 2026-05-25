@@ -30,6 +30,26 @@ curl -s http://localhost:3000/health
 
 При успешном старте в логах: `Rental AI Agent запущен на http://localhost:3000`.
 
+### Telegram proxy (RU-серверы)
+
+Если с VPS нет прямого доступа к `api.telegram.org` (ошибка `ETIMEDOUT 149.154.x.x`), входящий webhook работает через nginx, но **исходящие** вызовы Bot API (`sendMessage`, `answerCallbackQuery`) нужно пустить через локальный Xray:
+
+1. На сервере: Xray **mixed** inbound на `127.0.0.1:10808`, outbound на VPN exit (NL).
+2. В `.env`:
+
+```env
+TELEGRAM_PROXY=socks5://127.0.0.1:10808
+```
+
+3. Проверка:
+
+```bash
+curl -x socks5h://127.0.0.1:10808 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
+node tests/diagnose_telegram.js
+```
+
+Без блокировки `TELEGRAM_PROXY` не задавайте — агент ходит в Telegram напрямую.
+
 ---
 
 ## Переменные окружения
@@ -41,7 +61,7 @@ curl -s http://localhost:3000/health
 | Сервер | `PORT`, `NODE_ENV`, `DEMO_MODE` | `PORT` по умолчанию 3000; в production `DEMO_MODE=false` |
 | Notion CRM | `NOTION_TOKEN`, `NOTION_DATABASE_ID` | [notion.so/my-integrations](https://www.notion.so/my-integrations) |
 | LLM | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, … | [openrouter.ai/keys](https://openrouter.ai/keys) |
-| Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_OWNER_CHAT_ID` | @BotFather; chat_id — через `/start` и логи бота |
+| Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_OWNER_CHAT_ID`, `TELEGRAM_PROXY` (опц.) | @BotFather; chat_id — через `/start` и логи бота; proxy — см. ниже |
 | Авито | `AVITO_CLIENT_ID`, `AVITO_CLIENT_SECRET`, `AVITO_USER_ID` | [developers.avito.ru](https://developers.avito.ru) → приложение → ключи |
 | RC (входящий) | `REALTYCALENDAR_WEBHOOK_SECRET` | Опционально; верификация подписи — вне текущего скоупа |
 | RC (исходящий) | `REALTYCALENDAR_API_URL`, `REALTYCALENDAR_API_TOKEN`, `REALTYCALENDAR_OBJECT_ID` | Кабинет RealtyCalendar → API / Объекты |

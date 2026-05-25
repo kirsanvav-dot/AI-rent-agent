@@ -1,5 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { formatDateRange } = require('../utils/formatDate');
+const { getTelegramProxyUrl, buildRequestOptionsForTelegramBot } = require('../utils/proxyConfig');
 
 const { TELEGRAM_BOT_TOKEN, TELEGRAM_OWNER_CHAT_ID } = process.env;
 
@@ -10,8 +11,19 @@ if (!TELEGRAM_OWNER_CHAT_ID) {
   console.warn('[telegram] TELEGRAM_OWNER_CHAT_ID не задан — уведомления владельцу работать не будут');
 }
 
+const telegramProxy = getTelegramProxyUrl();
+if (telegramProxy) {
+  console.log(`[telegram] Исходящие запросы Bot API через proxy: ${telegramProxy}`);
+}
+
+const botOptions = { polling: false };
+const proxyRequest = buildRequestOptionsForTelegramBot();
+if (Object.keys(proxyRequest).length > 0) {
+  botOptions.request = proxyRequest;
+}
+
 const bot = TELEGRAM_BOT_TOKEN
-  ? new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false })
+  ? new TelegramBot(TELEGRAM_BOT_TOKEN, botOptions)
   : null;
 
 // ─── Публичные функции ────────────────────────────────────────────────────────
