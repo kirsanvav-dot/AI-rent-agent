@@ -146,6 +146,41 @@ async function answerCallbackQuery(callbackQueryId, text) {
   await bot.answerCallbackQuery(callbackQueryId, { text });
 }
 
+/**
+ * Запускает long polling: сервер сам опрашивает getUpdates (без входящего webhook).
+ * Перед стартом снимает webhook у Bot API — webhook и polling несовместимы.
+ *
+ * @param {(update: object) => void} processUpdate — обработчик (routes/telegram.processTelegramUpdate)
+ */
+async function startPolling(processUpdate) {
+  if (!bot) {
+    console.warn('[telegram] startPolling пропущен — бот не инициализирован');
+    return;
+  }
+
+  bot.on('polling_error', (err) => {
+    console.error(`[telegram] polling_error: ${err.message}`);
+  });
+
+  bot.on('message', (msg) => {
+    processUpdate({ message: msg });
+  });
+
+  bot.on('callback_query', (query) => {
+    processUpdate({ callback_query: query });
+  });
+
+  try {
+    await bot.deleteWebHook({ drop_pending_updates: false });
+    console.log('[telegram] Webhook снят (режим polling)');
+  } catch (err) {
+    console.error(`[telegram] Ошибка deleteWebHook: ${err.message}`);
+  }
+
+  await bot.startPolling();
+  console.log('[telegram] Polling запущен');
+}
+
 module.exports = {
   bot,
   ownerChatId: TELEGRAM_OWNER_CHAT_ID,
@@ -155,4 +190,5 @@ module.exports = {
   sendMessageWithKeyboard,
   notifyOwnerWithActions,
   answerCallbackQuery,
+  startPolling,
 };

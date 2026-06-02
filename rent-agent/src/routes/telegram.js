@@ -50,11 +50,7 @@ function looksLikePhone(text) {
   return String(text).replace(/\D/g, '').length >= 10;
 }
 
-async function telegramWebhook(req, res) {
-  res.sendStatus(200);
-
-  const update = req.body;
-
+function processTelegramUpdate(update) {
   if (update.callback_query) {
     handleCallbackQuery(update);
     return;
@@ -70,6 +66,11 @@ async function telegramWebhook(req, res) {
   }
 
   handleTextMessage(update);
+}
+
+async function telegramWebhook(req, res) {
+  res.sendStatus(200);
+  processTelegramUpdate(req.body);
 }
 
 async function handleConfirmBooking(pageId, callbackQueryId) {
@@ -395,3 +396,4 @@ function handleTextMessage(update) {
 }
 
 module.exports = telegramWebhook;
+module.exports.processTelegramUpdate = processTelegramUpdate;
