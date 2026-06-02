@@ -56,26 +56,63 @@ function extractGuestFromPayload(payload) {
   };
 }
 
+/**
+ * Нормализует тело webhook Авито.
+ * API v3 шлёт поля в payload.value; тесты/curl — плоский payload.
+ */
+function normalizeAvitoMessage(body) {
+  const outer = body?.payload;
+  if (!outer || outer.type !== 'message') {
+    return null;
+  }
+
+  const data = outer.value && typeof outer.value === 'object' ? outer.value : outer;
+
+  const text =
+    data.content?.text ||
+    data.text ||
+    '';
+
+  return {
+    type: 'message',
+    chat_id: data.chat_id,
+    author_id: data.author_id,
+    item_id: data.item_id || outer.item_id || body.item_id || null,
+    content: { text },
+    user: data.user,
+    author: data.author,
+    user_name: data.user_name,
+    sender: data.sender,
+    phone: data.phone,
+    contact: data.contact,
+  };
+}
+
 async function avitoWebhook(req, res) {
   // Немедленно отвечаем — Авито ждёт 200 OK
   res.sendStatus(200);
 
-  const { payload } = req.body;
+  const payload = normalizeAvitoMessage(req.body);
 
-  // Обрабатываем только текстовые сообщения
-  if (!payload || payload.type !== 'message') {
+  if (!payload) {
+    const eventType = req.body?.payload?.type;
+    if (eventType) {
+      console.log(`[webhook/avito] пропущено событие: type=${eventType}`);
+    }
     return;
   }
 
   // Не отвечаем на собственные сообщения
   if (String(payload.author_id) === String(AVITO_USER_ID)) {
+    console.log(`[webhook/avito] пропущено: author_id=${payload.author_id} (своё сообщение)`);
     return;
   }
 
   const chatId = String(payload.chat_id);
   const text   = payload.content?.text || '';
 
-  if (!text) {
+  if (!chatId || chatId === 'undefined' || !text) {
+    console.log(`[webhook/avito] пропущено: неполный payload (chat_id=${chatId || '—'}, text_len=${text.length})`);
     return;
   }
 

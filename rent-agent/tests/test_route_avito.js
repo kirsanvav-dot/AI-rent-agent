@@ -232,6 +232,32 @@ async function run() {
     assert.ok(keyboard[0][1].callback_data.startsWith('status_cancelled:'));
   });
 
+  await test('API v3 payload (payload.value) → тот же pipeline', async () => {
+    const res = makeRes();
+    await avitoWebhook(makeReq({
+      id: 'wh-1',
+      version: '2.0',
+      timestamp: 1730000000,
+      payload: {
+        type: 'message',
+        value: {
+          id: 'msg-1',
+          chat_id: 'avito-v3-chat-99',
+          author_id: 'guest-12345',
+          item_id: 'item-777',
+          type: 'text',
+          content: { text: 'Здравствуйте, есть место?' },
+        },
+      },
+    }), res);
+    await sleep(50);
+
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(calls.avito.length, 2, 'getToken + sendMessage');
+    assert.strictEqual(calls.llm[0][1], 'Здравствуйте, есть место?');
+    assert.strictEqual(calls.avito[1][1].chatId, 'avito-v3-chat-99');
+  });
+
   await test('Повторное сообщение в известном чате → notifyOwnerWithActions НЕ вызывается', async () => {
     notion._mockBooking = {
       pageId: 'existing-page',
