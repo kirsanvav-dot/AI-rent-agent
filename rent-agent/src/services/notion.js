@@ -14,44 +14,7 @@ const proxyUrl = getTelegramProxyUrl();
 if (proxyUrl) {
   const { SocksProxyAgent } = require('socks-proxy-agent');
   const agent = new SocksProxyAgent(proxyUrl);
-  notionClientOptions.fetch = (url, init) =>
-    fetch(url, { ...init, dispatcher: undefined }).catch(() => {
-      // fallback: use node-fetch with agent if global fetch fails
-      throw new Error('fetch failed');
-    });
-
-  // Переопределяем fetch через https напрямую с агентом
-  const https = require('https');
-  notionClientOptions.fetch = async (url, options = {}) => {
-    const { method = 'GET', headers = {}, body } = options;
-    return new Promise((resolve, reject) => {
-      const urlObj = new URL(url);
-      const reqOptions = {
-        hostname: urlObj.hostname,
-        path: urlObj.pathname + urlObj.search,
-        method,
-        headers,
-        agent,
-      };
-      const req = https.request(reqOptions, (res) => {
-        const chunks = [];
-        res.on('data', (c) => chunks.push(c));
-        res.on('end', () => {
-          const text = Buffer.concat(chunks).toString();
-          resolve({
-            ok: res.statusCode >= 200 && res.statusCode < 300,
-            status: res.statusCode,
-            headers: { get: (h) => res.headers[h.toLowerCase()] },
-            json: () => Promise.resolve(JSON.parse(text)),
-            text: () => Promise.resolve(text),
-          });
-        });
-      });
-      req.on('error', reject);
-      if (body) req.write(body);
-      req.end();
-    });
-  };
+  notionClientOptions.agent = agent;
   console.log('[notion] Исходящие запросы через proxy');
 }
 
